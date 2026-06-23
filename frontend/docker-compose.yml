@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: security-postgres
+    user: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: p0stgr3s_secure_pass
+      POSTGRES_DB: logto
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  logto:
+    image: svhd/logto:latest
+    container_name: security-logto
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    ports:
+      - "3001:3001" # Core Auth Service
+      - "3002:3002" # Admin Console
+    environment:
+      - TRUST_PROXY_HEADER=1
+      - DB_URL=postgres://postgres:p0stgr3s_secure_pass@postgres:5432/logto
+      - ENDPOINT=http://localhost:3001
+      - ADMIN_ENDPOINT=http://localhost:3002
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: security-web
+    depends_on:
+      - logto
+    ports:
+      - "3000:3000"
+    environment:
+      - LOGTO_M2M_APP_ID=${LOGTO_M2M_APP_ID}
+      - LOGTO_M2M_APP_SECRET=${LOGTO_M2M_APP_SECRET}
+      - LOGTO_ENDPOINT=http://security-logto:3001
+      - LOGTO_BASE_URL=http://localhost:3000
+      - LOGTO_COOKIE_SECRET=${LOGTO_COOKIE_SECRET}
+    extra_hosts:
+      - "localhost:host-gateway"
+
+volumes:
+  postgres_data:

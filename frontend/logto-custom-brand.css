@@ -1,0 +1,199 @@
+/* 
+  ======================================================================
+  CYBERSECURITY TERMINAL THEME FOR LOGTO SIGN-IN EXPERIENCE
+  ======================================================================
+  Copy and paste this entire stylesheet into your Logto Console under:
+  Sign-in & account > Branding > Custom CSS
+  
+  This will match your Logto sign-in flow to the application console design.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+:root {
+  /* Override Logto Theme Variables */
+  --color-primary: #00ff66 !important;
+  --color-primary-hover: rgba(0, 255, 102, 0.8) !important;
+  --color-background: #050b14 !important;
+  --color-surface: #0b1524 !important;
+  --color-text: #00ff66 !important;
+  --color-text-secondary: #00e5ff !important;
+  --color-border: #00ff6644 !important;
+  
+  /* Layout constraints */
+  --radius-card: 4px !important;
+  --radius-button: 2px !important;
+  --radius-input: 2px !important;
+}
+
+/* Base Body Styles */
+body {
+  background-color: #050b14 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  color: #00ff66 !important;
+  position: relative !important;
+}
+
+/* CRT monitor screen line simulator overlay */
+body::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+  z-index: 9999;
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+/* The Sign-in Card Box container */
+.logto-card, 
+[class*="CardContainer"], 
+[class*="StyledCard"], 
+[class*="CardWrapper"] {
+  background-color: rgba(11, 21, 36, 0.9) !important;
+  border: 1px solid #00ff6644 !important;
+  box-shadow: 0 0 25px rgba(0, 255, 102, 0.1), inset 0 0 15px rgba(0, 255, 102, 0.05) !important;
+  position: relative !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Neon Corner brackets on the Logto form card */
+.logto-card::before, 
+[class*="CardContainer"]::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 15px !important;
+  height: 15px !important;
+  border-top: 2px solid #00ff66 !important;
+  border-left: 2px solid #00ff66 !important;
+}
+
+.logto-card::after, 
+[class*="CardContainer"]::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  width: 15px !important;
+  height: 15px !important;
+  border-bottom: 2px solid #00ff66 !important;
+  border-right: 2px solid #00ff66 !important;
+}
+
+/* Text & Title elements */
+h1, h2, h3, 
+[class*="Title"], 
+[class*="Heading"], 
+[class*="Header"] {
+  color: #00ff66 !important;
+  text-shadow: 0 0 8px rgba(0, 255, 102, 0.5) !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+}
+
+p, span, label, 
+[class*="Text"], 
+[class*="SubText"], 
+[class*="HelperText"] {
+  color: #00e5ff !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.9rem !important;
+}
+
+/* Link overrides */
+a, [class*="Link"] {
+  color: #00e5ff !important;
+  text-decoration: underline !important;
+  transition: all 0.2s ease !important;
+}
+
+a:hover, [class*="Link"]:hover {
+  color: #00ff66 !important;
+  text-shadow: 0 0 5px #00ff66 !important;
+}
+
+/* Inputs styling */
+input, [class*="Input"] {
+  background-color: #050b14 !important;
+  border: 1px solid #00ff6644 !important;
+  color: #00ff66 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  padding: 10px 14px !important;
+  transition: all 0.3s ease !important;
+}
+
+input:focus, [class*="Input"]:focus, [class*="Input"]:focus-within {
+  border-color: #00e5ff !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.4) !important;
+  outline: none !important;
+}
+
+/* Buttons styling */
+button, 
+[class*="Button"], 
+[class*="SubmitButton"] {
+  background-color: transparent !important;
+  border: 1px solid #00ff66 !important;
+  color: #00ff66 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 2px !important;
+  font-weight: bold !important;
+  padding: 12px 24px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  position: relative !important;
+}
+
+button:hover, 
+[class*="Button"]:hover, 
+[class*="SubmitButton"]:hover {
+  background-color: rgba(0, 255, 102, 0.1) !important;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.4) !important;
+  text-shadow: 0 0 5px #00ff66 !important;
+}
+
+/* Social Login buttons */
+[class*="SocialButton"], 
+[class*="ConnectorButton"] {
+  background-color: #050b14 !important;
+  border: 1px solid #00e5ff33 !important;
+  color: #00e5ff !important;
+}
+
+[class*="SocialButton"]:hover, 
+[class*="ConnectorButton"]:hover {
+  border-color: #00e5ff !important;
+  background-color: rgba(0, 229, 255, 0.05) !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2) !important;
+}
+
+/* Checkbox & Options */
+input[type="checkbox"], 
+[class*="Checkbox"] {
+  border-color: #00ff6644 !important;
+  background-color: #050b14 !important;
+}
+
+input[type="checkbox"]:checked, 
+[class*="Checkbox"]:checked {
+  background-color: #00ff66 !important;
+  border-color: #00ff66 !important;
+}
+
+/* Error Alerts */
+[class*="Alert"], 
+[class*="ErrorContainer"], 
+[class*="ErrorMessage"] {
+  background-color: rgba(255, 51, 102, 0.1) !important;
+  border: 1px solid #ff3366 !important;
+  color: #ff3366 !important;
+  text-shadow: 0 0 5px rgba(255, 51, 102, 0.5) !important;
+}

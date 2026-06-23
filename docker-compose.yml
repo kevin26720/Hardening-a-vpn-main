@@ -1,0 +1,214 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # HAProxy Load Balancer (TCP Sticky Sessions)
+  # ==========================================
+  haproxy:
+    image: haproxy:2.8-alpine
+    container_name: haproxy-lb
+    ports:
+      - "1194:1194"
+    environment:
+      - LB_ALGORITHM=${LB_ALGORITHM:-leastconn}
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - vpn_network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command: ["sh", "-c", "sed \"s/\\$$LB_ALGORITHM/$$LB_ALGORITHM/g\" /usr/local/etc/haproxy/haproxy.cfg > /tmp/haproxy.cfg && exec haproxy -f /tmp/haproxy.cfg"]
+
+  # ==========================================
+  # OpenVPN Server - Node 1
+  # ==========================================
+  openvpn-node1:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    image: openvpn-hardened:latest
+    container_name: openvpn-node1
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - SETUID
+      - SETGID
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    read_only: true
+    tmpfs:
+      - /run
+      - /var/log/openvpn
+      - /tmp
+    volumes:
+      - ./docker/config/server-node1.conf:/etc/openvpn/openvpn.conf:ro
+      - ./docker/config/pki:/etc/openvpn/pki:ro
+      - ./docker/config/crl:/etc/openvpn/crl:ro  # Bind mount of the host CRL directory
+    networks:
+      - vpn_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    command: ["/etc/openvpn/openvpn.conf"]
+    restart: unless-stopped
+
+  # ==========================================
+  # OpenVPN Server - Node 2
+  # ==========================================
+  openvpn-node2:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    image: openvpn-hardened:latest
+    container_name: openvpn-node2
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - SETUID
+      - SETGID
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    read_only: true
+    tmpfs:
+      - /run
+      - /var/log/openvpn
+      - /tmp
+    volumes:
+      - ./docker/config/server-node2.conf:/etc/openvpn/openvpn.conf:ro
+      - ./docker/config/pki:/etc/openvpn/pki:ro
+      - ./docker/config/crl:/etc/openvpn/crl:ro  # Bind mount of the host CRL directory
+    networks:
+      - vpn_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    command: ["/etc/openvpn/openvpn.conf"]
+    restart: unless-stopped
+
+  # ==========================================
+  # OpenVPN Server - Node 3
+  # ==========================================
+  openvpn-node3:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    image: openvpn-hardened:latest
+    container_name: openvpn-node3
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - SETUID
+      - SETGID
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    read_only: true
+    tmpfs:
+      - /run
+      - /var/log/openvpn
+      - /tmp
+    volumes:
+      - ./docker/config/server-node3.conf:/etc/openvpn/openvpn.conf:ro
+      - ./docker/config/pki:/etc/openvpn/pki:ro
+      - ./docker/config/crl:/etc/openvpn/crl:ro  # Bind mount of the host CRL directory
+    networks:
+      - vpn_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    command: ["/etc/openvpn/openvpn.conf"]
+    restart: unless-stopped
+
+  # ==========================================
+  # Next.js Web Portal — logto-pruebas-master
+  # (Logto auth + VPN cert download)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vpn-frontend
+    depends_on:
+      - logto
+    ports:
+      - "3000:3000"
+    environment:
+      - LOGTO_M2M_APP_ID=${LOGTO_M2M_APP_ID:-6oi8l4d2919eknf6t3yn9}
+      - LOGTO_M2M_APP_SECRET=${LOGTO_M2M_APP_SECRET:-sAXjILcsNS9ipQxW0vEAs9wZlWPuElAe}
+      - LOGTO_ENDPOINT=http://security-logto:3001
+      - LOGTO_BASE_URL=http://localhost:3000
+      - LOGTO_COOKIE_SECRET=${LOGTO_COOKIE_SECRET:-5MpID6PGAaoygBvHyjU3e90a0g72zozo}
+    volumes:
+      - ./docker/config/pki:/etc/openvpn/pki:ro
+      - ./docker/config/client.ovpn.template:/etc/openvpn/client.ovpn.template:ro
+    networks:
+      - vpn_network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================
+  # Database for Logto
+  # ==========================================
+  postgres:
+    image: postgres:17-alpine
+    container_name: security-postgres
+    user: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: p0stgr3s_secure_pass
+      POSTGRES_DB: logto
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vpn_network
+    restart: unless-stopped
+
+  # ==========================================
+  # Logto Core Identity Service & Admin Console
+  # ==========================================
+  logto:
+    image: svhd/logto:latest
+    container_name: security-logto
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    ports:
+      - "3001:3001" # Core Auth Service
+      - "3002:3002" # Admin Console
+    environment:
+      - TRUST_PROXY_HEADER=1
+      - DB_URL=postgres://postgres:p0stgr3s_secure_pass@postgres:5432/logto
+      - ENDPOINT=http://localhost:3001
+      - ADMIN_ENDPOINT=http://localhost:3002
+    networks:
+      - vpn_network
+    restart: unless-stopped
+
+# Network configuration (dynamically allocated to prevent conflicts)
+networks:
+  vpn_network:
+    name: openvpn-hardened_vpn_network
+
+volumes:
+  postgres_data:
