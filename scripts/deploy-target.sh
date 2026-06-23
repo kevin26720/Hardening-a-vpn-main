@@ -47,65 +47,73 @@ scp -P "$SSH_PORT" -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no "$TAR_FILE" "$
 rm -f "$TAR_FILE"
 
 echo "[INFO] Extracting files and starting containers on target..."
-ssh -p "$SSH_PORT" -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no "$TARGET_USER@$TARGET_HOST" << EOF
-    cd "$DEPLOY_DIR"
-    
-    echo "[INFO] Extracting release..."
-    tar -xzf "$TAR_FILE"
-    rm -f "$TAR_FILE"
-    
-    # Check if a production PKI exists. If not, generate one for bootstrap/testing.
-    if [ ! -f "docker/config/pki/ca.crt" ]; then
-        echo "[WARNING] No PKI keys found on target. Executing local PKI bootstrap for testing..."
-        chmod +x scripts/init-pki.sh
-        ./scripts/init-pki.sh
-    fi
-    
-    echo "[INFO] Fixing Docker credential store for non-interactive SSH session..."
-    # Windows Docker Desktop uses 'wincred' which requires an active Windows logon session.
-    # When deploying via SSH (no interactive session), the credential helper fails.
-    # Override the credsStore to use plain file-based storage for this deployment.
-    DOCKER_CONFIG_DIR="$HOME/.docker"
-    mkdir -p "$DOCKER_CONFIG_DIR"
-    if [ -f "$DOCKER_CONFIG_DIR/config.json" ]; then
-        # Remove credsStore entry so Docker falls back to file-based auth
-        powershell -Command "
-            \$cfg = Get-Content '$DOCKER_CONFIG_DIR/config.json' | ConvertFrom-Json;
-            if (\$cfg.PSObject.Properties['credsStore']) {
-                \$cfg.PSObject.Properties.Remove('credsStore')
-            };
-            \$cfg | ConvertTo-Json -Depth 10 | Set-Content '$DOCKER_CONFIG_DIR/config.json'
-        " 2>/dev/null || \
-        python3 -c "
-import json, sys
-with open('$DOCKER_CONFIG_DIR/config.json', 'r') as f:
-    cfg = json.load(f)
-cfg.pop('credsStore', None)
-with open('$DOCKER_CONFIG_DIR/config.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
-" 2>/dev/null || true
-    else
-        echo '{"auths": {}}' > "$DOCKER_CONFIG_DIR/config.json"
-    fi
+# NOTE: The heredoc delimiter is QUOTED ('EOF') so that NO variable expansion
+# happens on the CI runner. Every $VAR below is evaluated on the remote machine.
+ssh -p "$SSH_PORT" -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no "$TARGET_USER@$TARGET_HOST" << 'EOF'
+set -e
+DEPLOY_DIR="openvpn-hardened"
+TAR_FILE="deploy.tar.gz"
 
-    echo "[INFO] Building and starting containers via Docker Compose..."
-    docker compose down --remove-orphans || docker-compose down --remove-orphans || true
-    docker compose up --build -d || docker-compose up --build -d
-    
-    echo "[INFO] Waiting for containers to initialize..."
-    sleep 15
-    
-    echo "[INFO] Verifying container status..."
-    # Use docker compose ps to check only THIS project's containers
-    RUNNING=$(docker compose ps --status running --quiet 2>/dev/null | wc -l || docker-compose ps -q 2>/dev/null | wc -l)
-    if [ "$RUNNING" -lt 1 ]; then
-        echo "[ERROR] One or more containers failed to start!"
-        docker compose ps -a 2>/dev/null || docker-compose ps -a 2>/dev/null || docker ps -a
-        exit 1
-    fi
-    
-    echo "[INFO] Container status:"
-    docker compose ps 2>/dev/null || docker-compose ps 2>/dev/null
-    
-    echo "[SUCCESS] Active-Active OpenVPN cluster deployed successfully on target!"
+cd "$DEPLOY_DIR"
+
+echo "[INFO] Extracting release..."
+tar -xzf "$TAR_FILE"
+rm -f "$TAR_FILE"
+
+# Check if a production PKI exists. If not, generate one for bootstrap/testing.
+if [ ! -f "docker/config/pki/ca.crt" ]; then
+    echo "[WARNING] No PKI keys found on target. Executing local PKI bootstrap for testing..."
+    chmod +x scripts/init-pki.sh
+    ./scripts/init-pki.sh
+fi
+
+# -------------------------------------------------------------------
+# FIX: Docker Desktop on Windows uses 'wincred' as the credential
+# store, which requires an active interactive Windows logon session.
+# When connecting via SSH there is no such session, so any Docker
+# command that touches the registry fails with:
+#   "A specified logon session does not exist."
+#
+# Root-cause fix: override DOCKER_CONFIG to a temporary directory
+# containing a minimal config.json with NO credsStore entry.
+# Docker then uses anonymous (file-based) auth for all image pulls,
+# which works correctly in headless/SSH environments.
+#
+# All images used in this project are public (alpine, node-alpine,
+# haproxy, postgres, svhd/logto) and do not require authentication.
+# -------------------------------------------------------------------
+echo "[INFO] Configuring Docker for headless SSH session (bypassing wincred)..."
+DOCKER_CONFIG_HEADLESS="$(mktemp -d)"
+printf '{"auths": {}}' > "$DOCKER_CONFIG_HEADLESS/config.json"
+export DOCKER_CONFIG="$DOCKER_CONFIG_HEADLESS"
+# Clean up the temp config on exit
+trap 'rm -rf "$DOCKER_CONFIG_HEADLESS"' EXIT
+
+echo "[INFO] Building and starting containers via Docker Compose..."
+docker compose down --remove-orphans 2>/dev/null || docker-compose down --remove-orphans 2>/dev/null || true
+docker compose up --build -d || docker-compose up --build -d
+
+echo "[INFO] Waiting for containers to initialize..."
+sleep 15
+
+echo "[INFO] Verifying container status..."
+# docker compose ps is scoped to THIS project only — avoids false negatives
+# from unrelated containers on the host machine.
+RUNNING=$(docker compose ps --status running --quiet 2>/dev/null | wc -l)
+FAILED=$(docker compose ps --status exited --status dead --quiet 2>/dev/null | wc -l)
+
+echo "[INFO] Running: $RUNNING | Failed/Exited: $FAILED"
+docker compose ps 2>/dev/null || docker-compose ps 2>/dev/null
+
+if [ "$RUNNING" -lt 1 ]; then
+    echo "[ERROR] No containers are running. Deployment failed!"
+    exit 1
+fi
+
+if [ "$FAILED" -gt 0 ]; then
+    echo "[ERROR] $FAILED container(s) exited unexpectedly."
+    exit 1
+fi
+
+echo "[SUCCESS] Active-Active OpenVPN cluster deployed successfully on target!"
 EOF
